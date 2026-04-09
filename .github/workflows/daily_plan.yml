@@ -1,0 +1,29 @@
+name: 每日計畫發送
+
+on:
+  schedule:
+    - cron: '0 23 * * *'  # UTC 23:00 = 台灣時間 07:00
+  workflow_dispatch:
+
+jobs:
+  send-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install requests playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run daily plan
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        run: python daily_plan.py
