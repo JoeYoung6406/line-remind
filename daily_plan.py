@@ -9,9 +9,18 @@ PLAN_URL = "https://brp-bot.dev-dee.workers.dev/api/v1/plan?format=html"
 def take_screenshot():
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 800, "height": 1200})
+        page = browser.new_page(
+            viewport={"width": 500, "height": 900},
+            device_scale_factor=2  # 高解析度，字體更清晰
+        )
         page.goto(PLAN_URL, wait_until="networkidle")
-        screenshot = page.screenshot(full_page=True)
+        # 取得內容實際寬度，裁掉白邊
+        content_width = page.evaluate("document.body.scrollWidth")
+        content_height = page.evaluate("document.body.scrollHeight")
+        screenshot = page.screenshot(
+            full_page=True,
+            clip={"x": 0, "y": 0, "width": content_width, "height": content_height}
+        )
         browser.close()
     return screenshot
 
