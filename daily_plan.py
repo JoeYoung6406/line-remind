@@ -14,13 +14,8 @@ def take_screenshot():
             device_scale_factor=2  # 高解析度，字體更清晰
         )
         page.goto(PLAN_URL, wait_until="networkidle")
-        # 取得內容實際寬度，裁掉白邊
-        content_width = page.evaluate("document.body.scrollWidth")
-        content_height = page.evaluate("document.body.scrollHeight")
-        screenshot = page.screenshot(
-            full_page=True,
-            clip={"x": 0, "y": 0, "width": content_width, "height": content_height}
-        )
+        # 用 body 元素的實際範圍截圖，去除白邊
+        screenshot = page.locator("body").screenshot()
         browser.close()
     return screenshot
 
@@ -61,11 +56,17 @@ def send_line_image(image_url):
         },
         json={
             "to": GROUP_ID,
-            "messages": [{
-                "type": "image",
-                "originalContentUrl": image_url,
-                "previewImageUrl": image_url
-            }]
+            "messages": [
+                {
+                    "type": "text",
+                    "text": "各位家人平安，鼓勵你花些時間親近神唷~"
+                },
+                {
+                    "type": "image",
+                    "originalContentUrl": image_url,
+                    "previewImageUrl": image_url
+                }
+            ]
         }
     )
     return response
