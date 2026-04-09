@@ -36,7 +36,7 @@ def send_line_message(message):
     return response
 
 def main():
-    today = datetime.now()
+    today = datetime(2026, 4, 14)  # 測試用
     tomorrow = today + timedelta(days=1)
     tomorrow_key = tomorrow.strftime("%m/%d")
 
