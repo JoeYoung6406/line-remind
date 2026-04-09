@@ -1,0 +1,26 @@
+name: LINE 聚會提醒
+
+on:
+  schedule:
+    - cron: '0 11 * * *'  # 每天 UTC 11:00 = 台灣時間 19:00
+  workflow_dispatch:       # 允許手動觸發測試
+
+jobs:
+  send-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run reminder
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+        run: python remind.py
