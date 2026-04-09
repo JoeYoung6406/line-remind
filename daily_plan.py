@@ -16,13 +16,32 @@ def take_screenshot():
     return screenshot
 
 def upload_image(image_bytes):
+    # 先嘗試 litterbox（catbox 的暫存版，72小時有效）
+    try:
+        response = requests.post(
+            "https://litterbox.catbox.moe/resources/internals/api.php",
+            data={"reqtype": "fileupload", "time": "72h"},
+            files={"fileToUpload": ("plan.png", image_bytes, "image/png")},
+            timeout=30
+        )
+        url = response.text.strip()
+        if url.startswith("https://"):
+            print(f"litterbox 上傳成功：{url}")
+            return url
+        print(f"litterbox 回應：{url}")
+    except Exception as e:
+        print(f"litterbox 失敗：{e}")
+
+    # 備用：0x0.st
     response = requests.post(
-        "https://catbox.moe/user/api.php",
-        data={"reqtype": "fileupload"},
-        files={"fileToUpload": ("plan.png", image_bytes, "image/png")}
+        "https://0x0.st",
+        files={"file": ("plan.png", image_bytes, "image/png")},
+        timeout=30
     )
     response.raise_for_status()
-    return response.text.strip()
+    url = response.text.strip()
+    print(f"0x0.st 上傳成功：{url}")
+    return url
 
 def send_line_image(image_url):
     response = requests.post(
