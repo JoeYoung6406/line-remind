@@ -61,25 +61,49 @@ def upload_image(image_bytes):
     print(f"0x0.st 上傳成功：{url}")
     return url
 
-def send_line_image(image_url, links):
-    messages = [
-        {
-            "type": "text",
-            "text": "各位家人平安，鼓勵你花些時間親近神唷~"
-        },
-        {
-            "type": "image",
-            "originalContentUrl": image_url,
-            "previewImageUrl": image_url
-        }
-    ]
+def send_line_flex(image_url, links):
+    greeting = "各位家人平安，鼓勵你花些時間親近神唷~"
 
-    if links:
-        link_text = "\n".join([f"{title}\n{href}" for title, href in links])
-        messages.append({
-            "type": "text",
-            "text": link_text
+    footer_contents = []
+    for title, href in links:
+        footer_contents.append({
+            "type": "button",
+            "style": "link",
+            "height": "sm",
+            "action": {"type": "uri", "label": title, "uri": href}
         })
+
+    bubble = {
+        "type": "bubble",
+        "hero": {
+            "type": "image",
+            "url": image_url,
+            "size": "full",
+            "aspectMode": "fit",
+            "aspectRatio": "4:5"
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": greeting,
+                    "wrap": True,
+                    "size": "md",
+                    "color": "#333333"
+                }
+            ]
+        }
+    }
+
+    if footer_contents:
+        bubble["footer"] = {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": footer_contents
+        }
 
     response = requests.post(
         "https://api.line.me/v2/bot/message/push",
@@ -89,7 +113,11 @@ def send_line_image(image_url, links):
         },
         json={
             "to": GROUP_ID,
-            "messages": messages
+            "messages": [{
+                "type": "flex",
+                "altText": greeting,
+                "contents": bubble
+            }]
         }
     )
     return response
@@ -104,7 +132,7 @@ def main():
     print(f"圖片網址：{image_url}")
 
     print("發送到 LINE 群組...")
-    response = send_line_image(image_url, links)
+    response = send_line_flex(image_url, links)
     if response.status_code == 200:
         print("[成功] 每日計畫已發送")
     else:
