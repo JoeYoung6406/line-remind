@@ -25,5 +25,6 @@ jobs:
       - name: Run daily plan
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_TOKEN_B: ${{ secrets.LINE_TOKEN_B }}
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
         run: python daily_plan.py

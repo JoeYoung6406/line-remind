@@ -1,8 +1,10 @@
 import os
 import requests
+from datetime import datetime
 from playwright.sync_api import sync_playwright
 
-LINE_TOKEN = os.environ["LINE_TOKEN"]
+_day = datetime.now().day
+LINE_TOKEN = os.environ["LINE_TOKEN"] if _day % 2 == 1 else os.environ.get("LINE_TOKEN_B", os.environ["LINE_TOKEN"])
 GROUP_ID = os.environ["LINE_GROUP_ID"]
 PLAN_URL = "https://brp-bot.dev-dee.workers.dev/api/v1/plan?format=html"
 
@@ -61,66 +63,56 @@ def upload_image(image_bytes):
     print(f"0x0.st 上傳成功：{url}")
     return url
 
-def send_line_flex(image_url, links):
-    greeting = "各位家人平安，鼓勵你花些時間親近神唷~"
-
-    footer_contents = []
-    for title, href in links:
-        footer_contents.append({
-            "type": "button",
-            "style": "link",
-            "height": "sm",
-            "action": {"type": "uri", "label": title, "uri": href}
-        })
-
-    bubble = {
-        "type": "bubble",
-        "hero": {
-            "type": "image",
-            "url": image_url,
-            "size": "full",
-            "aspectMode": "fit",
-            "aspectRatio": "4:5"
-        },
-        "body": {
-            "type": "box",
-            "layout": "vertical",
-            "contents": [
-                {
-                    "type": "text",
-                    "text": greeting,
-                    "wrap": True,
-                    "size": "md",
-                    "color": "#333333"
-                }
-            ]
-        }
-    }
-
-    if footer_contents:
-        bubble["footer"] = {
-            "type": "box",
-            "layout": "vertical",
-            "spacing": "sm",
-            "contents": footer_contents
-        }
-
-    response = requests.post(
+def _push(messages):
+    return requests.post(
         "https://api.line.me/v2/bot/message/push",
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {LINE_TOKEN}"
         },
-        json={
-            "to": GROUP_ID,
-            "messages": [{
-                "type": "flex",
-                "altText": greeting,
-                "contents": bubble
-            }]
-        }
+        json={"to": GROUP_ID, "messages": messages}
     )
-    return response
+
+def send_line_flex(image_url, links):
+    greeting = "各位家人平安，鼓勵你花些時間親近神唷~"
+
+    # 第一則：截圖圖片（原生 image，可點開放大）
+    _push([{
+        "type": "image",
+        "originalContentUrl": image_url,
+        "previewImageUrl": image_url
+    }])
+
+    # 第二則：標語 + YouVersion 連結
+    footer_contents = [
+        {
+            "type": "button",
+            "style": "link",
+            "height": "sm",
+            "action": {"type": "uri", "label": title, "uri": href}
+        }
+        for title, href in links
+    ]
+    body_contents = [
+        {
+            "type": "text",
+            "text": greeting,
+            "wrap": True,
+            "size": "md",
+            "color": "#333333"
+        }
+    ] + footer_contents
+
+    bubble = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": body_contents
+        }
+    }
+    return _push([{"type": "flex", "altText": greeting, "contents": bubble}])
 
 def main():
     print("截取網頁中...")
