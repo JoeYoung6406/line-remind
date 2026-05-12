@@ -2,7 +2,7 @@ name: LINE 聚會提醒
 
 on:
   schedule:
-    - cron: '0 11 * * *'  # 每天 UTC 11:00 = 台灣時間 19:00
+    - cron: '0 11 * * 2'  # 每週二 UTC 11:00 = 台灣時間 19:00
   workflow_dispatch:       # 允許手動觸發測試
 
 jobs:
