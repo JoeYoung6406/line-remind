@@ -5,6 +5,9 @@ on:
     - cron: '0 22 * * *'  # UTC 22:00 = 台灣時間 06:00
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   send-plan:
     runs-on: ubuntu-latest
@@ -22,9 +25,20 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Run daily plan
+      - name: Take screenshot
+        run: python daily_plan.py
+
+      - name: Commit screenshot to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add plan.png
+          git diff --staged --quiet || git commit -m "Daily plan $(date +%Y-%m-%d)"
+          git push
+
+      - name: Send LINE message
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_TOKEN_B: ${{ secrets.LINE_TOKEN_B }}
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
-        run: python daily_plan.py
+        run: python send_daily.py
