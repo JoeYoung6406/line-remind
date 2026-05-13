@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 22 * * *'  # UTC 22:00 = 台灣時間 06:00
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (截圖但不發 LINE)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,6 +45,7 @@ jobs:
         run: sleep 30
 
       - name: Send LINE message
+        if: ${{ inputs.dry_run != true }}
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_TOKEN_B: ${{ secrets.LINE_TOKEN_B }}
