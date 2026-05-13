@@ -52,15 +52,31 @@ def upload_image(image_bytes):
     except Exception as e:
         print(f"litterbox 失敗：{e}")
 
-    # 備用：0x0.st
+    # 備用1：0x0.st
+    try:
+        response = requests.post(
+            "https://0x0.st",
+            files={"file": ("plan.png", image_bytes, "image/png")},
+            timeout=30
+        )
+        url = response.text.strip()
+        if url.startswith("https://"):
+            print(f"0x0.st 上傳成功：{url}")
+            return url
+        print(f"0x0.st 回應：{url}")
+    except Exception as e:
+        print(f"0x0.st 失敗：{e}")
+
+    # 備用2：telegra.ph
     response = requests.post(
-        "https://0x0.st",
+        "https://telegra.ph/upload",
         files={"file": ("plan.png", image_bytes, "image/png")},
         timeout=30
     )
     response.raise_for_status()
-    url = response.text.strip()
-    print(f"0x0.st 上傳成功：{url}")
+    data = response.json()
+    url = "https://telegra.ph" + data[0]["src"]
+    print(f"telegra.ph 上傳成功：{url}")
     return url
 
 def _push(messages):
