@@ -1,4 +1,7 @@
 import os
+import csv
+import io
+import re
 import requests
 from datetime import datetime, timedelta
 
@@ -6,43 +9,79 @@ from datetime import datetime, timedelta
 CHANNEL_ACCESS_TOKEN = os.environ["LINE_TOKEN"]
 GROUP_ID = os.environ["LINE_GROUP_ID"]
 
-# 聚會排程：日期 -> [帶點心, 破冰, 敬拜, 代禱]
-SCHEDULE = {
-    "05/13": ["Janet", "Peter", "Shin", "頌揚"],
-    "05/20": ["Joe", "巧巧", "Tiffany", "Janet"],
-    "05/27": ["Peter", "Shin", "頌揚", "Joe"],
-    "06/03": ["巧巧", "Tiffany", "Janet", "Peter"],
-    "06/10": ["Shin", "頌揚", "Joe", "巧巧"],
-    "06/17": ["Tiffany", "Janet", "Peter", "Shin"],
-    "06/24": ["頌揚", "Joe", "巧巧", "Tiffany"],
-    "07/01": ["Janet", "Peter", "Shin", "頌揚"],
-    "07/08": ["Joe", "巧巧", "Tiffany", "Janet"],
-    "07/15": ["Peter", "Shin", "頌揚", "Joe"],
-    "07/22": ["巧巧", "Tiffany", "Janet", "Peter"],
-    "07/29": ["Shin", "頌揚", "Joe", "巧巧"],
-    "08/05": ["Tiffany", "Janet", "Peter", "Shin"],
-    "08/12": ["頌揚", "Joe", "巧巧", "Tiffany"],
-    "08/19": ["Janet", "Peter", "Shin", "頌揚"],
-    "08/26": ["Joe", "巧巧", "Tiffany", "Janet"],
-    "09/02": ["Peter", "Shin", "頌揚", "Joe"],
-    "09/09": ["巧巧", "Tiffany", "Janet", "Peter"],
-    "09/16": ["Shin", "頌揚", "Joe", "巧巧"],
-    "09/23": ["Tiffany", "Janet", "Peter", "Shin"],
-    "09/30": ["頌揚", "Joe", "巧巧", "Tiffany"],
-    "10/07": ["Janet", "Peter", "Shin", "頌揚"],
-    "10/14": ["Joe", "巧巧", "Tiffany", "Janet"],
-    "10/21": ["Peter", "Shin", "頌揚", "Joe"],
-    "10/28": ["巧巧", "Tiffany", "Janet", "Peter"],
-    "11/04": ["Shin", "頌揚", "Joe", "巧巧"],
-    "11/11": ["Tiffany", "Janet", "Peter", "Shin"],
-    "11/18": ["頌揚", "Joe", "巧巧", "Tiffany"],
-    "11/25": ["Janet", "Peter", "Shin", "頌揚"],
-    "12/02": ["Joe", "巧巧", "Tiffany", "Janet"],
-    "12/09": ["Peter", "Shin", "頌揚", "Joe"],
-    "12/16": ["巧巧", "Tiffany", "Janet", "Peter"],
-    "12/23": ["Shin", "頌揚", "Joe", "巧巧"],
-    "12/30": ["Tiffany", "Janet", "Peter", "Shin"],
-}
+# 輪值分配直接讀取 Google Sheet（試算表更新後不需改程式）
+SHEET_ID = "1bbRLsAE4tEMaZG7D6QGKK9XZrig43ZrQeLOR_eFCQKQ"
+SHEET_NAME = "輪值分配"
+SHEET_CSV_URL = (
+    f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
+    f"/gviz/tq?tqx=out:csv&sheet={requests.utils.quote(SHEET_NAME)}"
+)
+
+DATE_HEADER = "日期"
+# 輸出順序：標題名稱 -> 顯示文字
+ROLES = ["帶點心", "破冰", "敬拜", "代禱"]
+
+
+def _parse_md(value):
+    """把試算表的日期欄位轉成 (月, 日)，無法解析則回傳 None。"""
+    if not value:
+        return None
+    value = value.strip()
+
+    # gviz 對日期型欄位可能回傳 Date(年,月,日)，其中月份是 0-based
+    m = re.match(r"Date\((\d+),(\d+),(\d+)\)", value)
+    if m:
+        return int(m.group(2)) + 1, int(m.group(3))
+
+    parts = re.split(r"[/-]", value)
+    try:
+        if len(parts) == 2:          # M/D
+            return int(parts[0]), int(parts[1])
+        if len(parts) == 3:          # Y/M/D
+            return int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+    return None
+
+
+def fetch_schedule():
+    """從 Google Sheet 抓輪值表，回傳 {(月, 日): {角色: 人名}}。"""
+    resp = requests.get(SHEET_CSV_URL, timeout=20)
+    resp.raise_for_status()
+    resp.encoding = "utf-8"
+    rows = list(csv.reader(io.StringIO(resp.text)))
+
+    # 找到含「日期」的標題列，並依欄名定位各欄索引（不寫死欄位位置）
+    date_idx = None
+    role_idx = {}
+    header_row = -1
+    for i, row in enumerate(rows):
+        cells = [c.strip() for c in row]
+        if DATE_HEADER in cells:
+            date_idx = cells.index(DATE_HEADER)
+            for role in ROLES:
+                if role in cells:
+                    role_idx[role] = cells.index(role)
+            header_row = i
+            break
+
+    if date_idx is None:
+        raise ValueError("在試算表中找不到『日期』標題列")
+
+    schedule = {}
+    for row in rows[header_row + 1:]:
+        if len(row) <= date_idx:
+            continue
+        key = _parse_md(row[date_idx])
+        if key is None:
+            continue
+        persons = {
+            role: (row[idx].strip() if idx < len(row) else "")
+            for role, idx in role_idx.items()
+        }
+        schedule[key] = persons
+    return schedule
+
 
 def send_line_message(message):
     url = "https://api.line.me/v2/bot/message/push"
@@ -57,28 +96,37 @@ def send_line_message(message):
     response = requests.post(url, headers=headers, json=data)
     return response
 
+
 def main():
     today = datetime.now()
     tomorrow = today + timedelta(days=1)
-    tomorrow_key = tomorrow.strftime("%m/%d")
+    key = (tomorrow.month, tomorrow.day)
 
-    if tomorrow_key in SCHEDULE:
-        persons = SCHEDULE[tomorrow_key]
-        meeting_date = f"{tomorrow.month}/{tomorrow.day}"
-        message = (
-            f"明天的聚會 {meeting_date}\n"
-            f"帶點心：{persons[0]}\n"
-            f"破冰：{persons[1]}\n"
-            f"敬拜：{persons[2]}\n"
-            f"代禱：{persons[3]}"
-        )
-        response = send_line_message(message)
-        if response.status_code == 200:
-            print(f"[成功] 已發送 {meeting_date} 聚會提醒")
-        else:
-            print(f"[失敗] {response.status_code}：{response.text}")
+    schedule = fetch_schedule()
+
+    if key not in schedule:
+        print(f"明天 {tomorrow.month}/{tomorrow.day} 沒有聚會，不發送。")
+        return
+
+    persons = schedule[key]
+    meeting_date = f"{tomorrow.month}/{tomorrow.day}"
+
+    # 停聚處理：帶點心欄出現「暫停」或全部空白
+    lead = persons.get("帶點心", "")
+    if "暫停" in lead or not any(persons.values()):
+        print(f"明天 {meeting_date} 暫停聚會，不發送。")
+        return
+
+    lines = [f"明天的聚會 {meeting_date}"]
+    lines += [f"{role}：{persons.get(role, '')}" for role in ROLES]
+    message = "\n".join(lines)
+
+    response = send_line_message(message)
+    if response.status_code == 200:
+        print(f"[成功] 已發送 {meeting_date} 聚會提醒")
     else:
-        print(f"明天 {tomorrow_key} 沒有聚會，不發送。")
+        print(f"[失敗] {response.status_code}：{response.text}")
+
 
 if __name__ == "__main__":
     main()
