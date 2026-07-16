@@ -1,0 +1,53 @@
+name: 發送監控（漏發自動補發）
+
+on:
+  schedule:
+    - cron: '0 0 * * *'    # 台北每天 08:00，檢查每日靈修（06:00 發送）
+    - cron: '0 13 * * 2'   # 台北週二 21:00，檢查聚會提醒（19:00 發送）
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '要檢查的 workflow'
+        type: choice
+        options:
+          - daily_plan.yml
+          - remind.yml
+        default: daily_plan.yml
+
+permissions:
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 判斷檢查目標
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "wf=${{ inputs.target }}" >> "$GITHUB_OUTPUT"
+          elif [ "$(date -u +%H)" -ge 12 ]; then
+            echo "wf=remind.yml" >> "$GITHUB_OUTPUT"
+          else
+            echo "wf=daily_plan.yml" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 檢查是否已成功發送，漏發就自動補發
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          wf="${{ steps.target.outputs.wf }}"
+          cutoff=$(date -u -d '6 hours ago' +%s)
+          ok=$(gh run list --workflow="$wf" --limit 20 --json conclusion,createdAt \
+            --jq "[.[] | select(.conclusion==\"success\" and (.createdAt|fromdate) > $cutoff)] | length")
+          if [ "$ok" -gt 0 ]; then
+            echo "$wf 過去 6 小時內有 $ok 筆成功發送，一切正常。"
+            exit 0
+          fi
+          echo "::warning::$wf 過去 6 小時內沒有成功發送，自動補發一次。"
+          gh workflow run "$wf"
+          sleep 30
+          run_id=$(gh run list --workflow="$wf" --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run watch "$run_id" --exit-status
+          echo "補發成功。"

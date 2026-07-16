@@ -45,9 +45,21 @@ jobs:
         run: sleep 30
 
       - name: Send LINE message
+        id: send
         if: ${{ inputs.dry_run != true }}
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
           LINE_TOKEN_B: ${{ secrets.LINE_TOKEN_B }}
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
         run: python send_daily.py
+
+      - name: Record send log
+        if: always() && steps.send.outcome != 'skipped'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          echo "| $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M') | ${{ github.workflow }} | ${{ github.event_name }} | ${{ steps.send.outcome }} |" >> SEND_LOG.md
+          git add SEND_LOG.md
+          git commit -m "log: 發送紀錄 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
+          git pull --rebase origin main
+          git push
