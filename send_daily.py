@@ -4,8 +4,11 @@ import requests
 from datetime import datetime
 
 _day = datetime.now().day
-LINE_TOKEN = os.environ["LINE_TOKEN"] if _day % 2 == 1 else os.environ.get("LINE_TOKEN_B", os.environ["LINE_TOKEN"])
-GROUP_ID = os.environ["LINE_GROUP_ID"]
+if _day % 2 == 1:
+    LINE_TOKEN = os.environ.get("LINE_TOKEN", "")
+else:
+    LINE_TOKEN = os.environ.get("LINE_TOKEN_B") or os.environ.get("LINE_TOKEN", "")
+GROUP_ID = os.environ.get("LINE_GROUP_ID", "")
 
 IMAGE_URL = "https://raw.githubusercontent.com/JoeYoung6406/line-remind/main/plan.png"
 LINKS_PATH = "links.json"
@@ -20,16 +23,26 @@ def _push(messages):
         json={"to": GROUP_ID, "messages": messages}
     )
 
+def plan_aspect_ratio():
+    """讀 plan.png 的實際尺寸給 hero 圖用（LINE 限制高最多是寬的 3 倍）。"""
+    try:
+        with open("plan.png", "rb") as f:
+            head = f.read(24)
+        w = int.from_bytes(head[16:20], "big")
+        h = int.from_bytes(head[20:24], "big")
+        if w > 0 and h > 0:
+            return f"{w}:{min(h, w * 3)}"
+    except OSError:
+        pass
+    return "500:900"
+
+
 def send_line_message(links):
     greeting = "各位家人平安，鼓勵你花些時間親近神唷~"
+    # 加日期參數避免 LINE 快取到前一天的舊圖
+    image_url = f"{IMAGE_URL}?v={datetime.now():%Y%m%d}"
 
-    _push([{
-        "type": "image",
-        "originalContentUrl": IMAGE_URL,
-        "previewImageUrl": IMAGE_URL
-    }])
-
-    footer_contents = [
+    buttons = [
         {
             "type": "button",
             "style": "link",
@@ -38,26 +51,39 @@ def send_line_message(links):
         }
         for title, href in links
     ]
-    body_contents = [
-        {
-            "type": "text",
-            "text": greeting,
-            "wrap": True,
-            "size": "md",
-            "color": "#333333"
-        }
-    ] + footer_contents
 
     bubble = {
         "type": "bubble",
+        "hero": {
+            "type": "image",
+            "url": image_url,
+            "size": "full",
+            "aspectRatio": plan_aspect_ratio(),
+            "aspectMode": "fit",
+            "action": {"type": "uri", "uri": image_url}
+        },
         "body": {
             "type": "box",
             "layout": "vertical",
             "spacing": "sm",
-            "contents": body_contents
+            "contents": [
+                {
+                    "type": "text",
+                    "text": greeting,
+                    "wrap": True,
+                    "size": "md",
+                    "color": "#333333"
+                }
+            ] + buttons
         }
     }
-    return _push([{"type": "flex", "altText": greeting, "contents": bubble}])
+    message = {"type": "flex", "altText": greeting, "contents": bubble}
+
+    if os.environ.get("DRY_RUN"):
+        print(json.dumps(message, ensure_ascii=False, indent=2))
+        return None
+
+    return _push([message])
 
 def main():
     with open(LINKS_PATH, encoding="utf-8") as f:
@@ -65,7 +91,9 @@ def main():
 
     print("發送到 LINE 群組...")
     response = send_line_message(links)
-    if response.status_code == 200:
+    if response is None:
+        print("[DRY RUN] 只顯示訊息內容，未發送")
+    elif response.status_code == 200:
         print("[成功] 每日計畫已發送")
     else:
         print(f"[失敗] {response.status_code}：{response.text}")
