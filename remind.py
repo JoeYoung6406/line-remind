@@ -1,13 +1,14 @@
 import os
 import csv
 import io
+import json
 import re
 import requests
 from datetime import datetime, timedelta
 
 # ===== 設定 =====
-CHANNEL_ACCESS_TOKEN = os.environ["LINE_TOKEN"]
-GROUP_ID = os.environ["LINE_GROUP_ID"]
+CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_TOKEN", "")
+GROUP_ID = os.environ.get("LINE_GROUP_ID", "")
 
 # 輪值分配直接讀取 Google Sheet（試算表更新後不需改程式）
 SHEET_ID = "1bbRLsAE4tEMaZG7D6QGKK9XZrig43ZrQeLOR_eFCQKQ"
@@ -16,10 +17,17 @@ SHEET_CSV_URL = (
     f"https://docs.google.com/spreadsheets/d/{SHEET_ID}"
     f"/gviz/tq?tqx=out:csv&sheet={requests.utils.quote(SHEET_NAME)}"
 )
+SHEET_VIEW_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
 
 DATE_HEADER = "日期"
 # 輸出順序：標題名稱 -> 顯示文字
 ROLES = ["帶點心", "破冰", "敬拜", "代禱"]
+
+# 卡片配色（與 Hope Kids 服事卡同一套視覺）
+INK = "#4a3b22"
+TEAL = "#2bb3a3"
+BG_SOFT = "#fffdf6"
+BADGE_COLORS = ["#f2a900", "#ff7a59", "#2bb3a3"]
 
 
 def _parse_md(value):
@@ -83,6 +91,96 @@ def fetch_schedule():
     return schedule
 
 
+def role_row(label, name, color):
+    return {
+        "type": "box",
+        "layout": "horizontal",
+        "alignItems": "center",
+        "spacing": "md",
+        "contents": [
+            {
+                "type": "box",
+                "layout": "vertical",
+                "backgroundColor": color,
+                "cornerRadius": "6px",
+                "paddingAll": "4px",
+                "width": "72px",
+                "contents": [{
+                    "type": "text",
+                    "text": label,
+                    "size": "xs",
+                    "weight": "bold",
+                    "color": "#ffffff",
+                    "align": "center",
+                }],
+            },
+            {
+                "type": "text",
+                "text": name or "—",
+                "size": "sm",
+                "color": INK,
+                "wrap": True,
+                "flex": 1,
+            },
+        ],
+    }
+
+
+def build_flex(meeting_date, weekday, persons):
+    body_rows = [
+        role_row(role, persons.get(role, ""), BADGE_COLORS[i % len(BADGE_COLORS)])
+        for i, role in enumerate(ROLES)
+    ]
+
+    bubble = {
+        "type": "bubble",
+        "size": "mega",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": TEAL,
+            "paddingAll": "16px",
+            "contents": [
+                {"type": "text", "text": "小組聚會提醒", "size": "xs",
+                 "weight": "bold", "color": "#ffffff"},
+                {"type": "text", "text": "明天的聚會", "size": "xl",
+                 "weight": "bold", "color": "#ffffff", "margin": "xs"},
+                {"type": "text", "text": f"{meeting_date} {weekday}", "size": "sm",
+                 "color": "#ffffff", "margin": "xs"},
+            ],
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": BG_SOFT,
+            "spacing": "sm",
+            "paddingAll": "16px",
+            "contents": body_rows,
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": TEAL,
+                    "height": "sm",
+                    "action": {"type": "uri", "label": "查看輪值表",
+                               "uri": SHEET_VIEW_URL},
+                },
+            ],
+        },
+    }
+
+    return {
+        "type": "flex",
+        "altText": f"明天的聚會 {meeting_date} 提醒",
+        "contents": bubble,
+    }
+
+
 def send_line_message(message):
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
@@ -91,7 +189,7 @@ def send_line_message(message):
     }
     data = {
         "to": GROUP_ID,
-        "messages": [{"type": "text", "text": message}]
+        "messages": [message]
     }
     response = requests.post(url, headers=headers, json=data)
     return response
@@ -99,17 +197,22 @@ def send_line_message(message):
 
 def main():
     today = datetime.now()
-    tomorrow = today + timedelta(days=1)
-    key = (tomorrow.month, tomorrow.day)
+    override = os.environ.get("REMIND_DATE")  # 測試用：指定 M/D 模擬「明天」
+    if override:
+        m, d = (int(x) for x in override.split("/"))
+        target = datetime(today.year, m, d)
+    else:
+        target = today + timedelta(days=1)
 
+    key = (target.month, target.day)
     schedule = fetch_schedule()
 
     if key not in schedule:
-        print(f"明天 {tomorrow.month}/{tomorrow.day} 沒有聚會，不發送。")
+        print(f"明天 {key[0]}/{key[1]} 沒有聚會，不發送。")
         return
 
     persons = schedule[key]
-    meeting_date = f"{tomorrow.month}/{tomorrow.day}"
+    meeting_date = f"{key[0]}/{key[1]}"
 
     # 停聚處理：帶點心欄出現「暫停」或全部空白
     lead = persons.get("帶點心", "")
@@ -117,9 +220,13 @@ def main():
         print(f"明天 {meeting_date} 暫停聚會，不發送。")
         return
 
-    lines = [f"明天的聚會 {meeting_date}"]
-    lines += [f"{role}：{persons.get(role, '')}" for role in ROLES]
-    message = "\n".join(lines)
+    weekday = "（週" + "一二三四五六日"[target.weekday()] + "）"
+    message = build_flex(meeting_date, weekday, persons)
+
+    if os.environ.get("DRY_RUN"):
+        print(json.dumps(message, ensure_ascii=False, indent=2))
+        print(f"\n[DRY RUN] {meeting_date} {weekday} {persons}")
+        return
 
     response = send_line_message(message)
     if response.status_code == 200:
