@@ -49,3 +49,4 @@
 | 2026-08-23 06:17 | 每日計畫發送 | schedule | success |
 | 2026-08-24 06:17 | 每日計畫發送 | schedule | success |
 | 2026-08-25 06:20 | 每日計畫發送 | schedule | success |
+| 2026-08-25 19:21 | LINE 聚會提醒 | schedule | success |
