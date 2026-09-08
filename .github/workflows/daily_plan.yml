@@ -1,8 +1,8 @@
 name: 每日計畫發送
 
 on:
-  schedule:
-    - cron: '0 22 * * *'  # UTC 22:00 = 台灣時間 06:00
+  # 準點觸發改由 Cloudflare Worker Cron（每天 06:00 台北）dispatch，
+  # 不用 GitHub schedule（整點常延遲數小時）。這裡只保留手動觸發與 watchdog 補發。
   workflow_dispatch:
     inputs:
       dry_run:
