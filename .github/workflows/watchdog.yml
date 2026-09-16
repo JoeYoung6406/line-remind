@@ -38,14 +38,36 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           wf="${{ steps.target.outputs.wf }}"
-          cutoff=$(date -u -d '6 hours ago' +%s)
-          ok=$(gh run list --workflow="$wf" --limit 20 --json conclusion,createdAt \
-            --jq "[.[] | select(.conclusion==\"success\" and (.createdAt|fromdate) > $cutoff)] | length")
-          if [ "$ok" -gt 0 ]; then
-            echo "$wf 過去 6 小時內有 $ok 筆成功發送，一切正常。"
+
+          # 用「台北日曆日期」判斷有沒有發過，不用「過去N小時」的滑動窗口。
+          # 原本用「過去6小時內有沒有成功」來判斷，但 Cloudflare 準點發送（06:00）
+          # 跟 watchdog 自己（延遲後可能中午甚至下午才跑）之間的間隔常常超過6小時，
+          # 會誤判「沒發過」而重複補發一次。改成比對日期就不會再受 watchdog 自己
+          # 延遲多久影響。
+          if [ "$wf" = "remind.yml" ]; then
+            # remind.yml 只在週二發送，參考日期抓「最近一個週二」（今天就是週二的話就是今天）
+            dow=$(TZ=Asia/Taipei date +%u)  # 1=一 … 7=日
+            back=$(( (dow - 2 + 7) % 7 ))
+            ref=$(TZ=Asia/Taipei date -d "-${back} days" +%Y-%m-%d)
+          else
+            ref=$(TZ=Asia/Taipei date +%Y-%m-%d)
+          fi
+
+          sent=""
+          for t in $(gh run list --workflow="$wf" --limit 20 --json conclusion,createdAt \
+                     --jq '.[] | select(.conclusion=="success") | .createdAt'); do
+            d=$(TZ=Asia/Taipei date -d "$t" +%Y-%m-%d)
+            if [ "$d" = "$ref" ]; then
+              sent="yes"
+              break
+            fi
+          done
+
+          if [ -n "$sent" ]; then
+            echo "$wf 在台北 $ref 已經有成功發送，一切正常。"
             exit 0
           fi
-          echo "::warning::$wf 過去 6 小時內沒有成功發送，自動補發一次。"
+          echo "::warning::$wf 在台北 $ref 還沒有成功發送，自動補發一次。"
           gh workflow run "$wf"
           sleep 30
           run_id=$(gh run list --workflow="$wf" --limit 1 --json databaseId --jq '.[0].databaseId')
