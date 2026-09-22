@@ -85,3 +85,4 @@
 | 2026-09-20 12:13 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-09-21 06:01 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-09-22 06:01 | 每日計畫發送 | workflow_dispatch | success |
+| 2026-09-22 19:01 | LINE 聚會提醒 | workflow_dispatch | success |
