@@ -101,3 +101,4 @@
 | 2026-10-04 13:06 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-10-05 06:02 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-10-06 06:02 | 每日計畫發送 | workflow_dispatch | success |
+| 2026-10-06 19:01 | LINE 聚會提醒 | workflow_dispatch | success |
