@@ -13,6 +13,11 @@ on:
 permissions:
   contents: write
 
+# 避免 watchdog 誤判失敗、重新觸發，跟上一次還沒跑完的執行同時搶 git/LINE。
+concurrency:
+  group: line-remind-daily-plan
+  cancel-in-progress: false
+
 jobs:
   send-plan:
     runs-on: ubuntu-latest
@@ -39,7 +44,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add plan.png
           git diff --staged --quiet || git commit -m "Daily plan $(date +%Y-%m-%d)"
-          git push
+          git push || (git pull --rebase origin main && git push)
 
       - name: Wait for GitHub CDN
         run: sleep 30
@@ -53,13 +58,15 @@ jobs:
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
         run: python send_daily.py
 
+      # 只是寫紀錄，失敗不該讓整個 job 被判定成「失敗」（會害 watchdog 誤判重複補發）。
       - name: Record send log
         if: always() && steps.send.outcome != 'skipped'
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
           echo "| $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M') | ${{ github.workflow }} | ${{ github.event_name }} | ${{ steps.send.outcome }} |" >> SEND_LOG.md
           git add SEND_LOG.md
           git commit -m "log: 發送紀錄 $(TZ=Asia/Taipei date '+%Y-%m-%d %H:%M')"
-          git pull --rebase origin main
-          git push
+          git push || (git pull --rebase origin main && git push)
