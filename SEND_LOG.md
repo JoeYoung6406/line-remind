@@ -138,3 +138,4 @@
 | 2026-11-16 06:01 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-11-17 06:01 | 每日計畫發送 | workflow_dispatch | success |
 | 2026-11-17 19:00 | LINE 聚會提醒 | workflow_dispatch | success |
+| 2026-11-18 06:01 | 每日計畫發送 | workflow_dispatch | success |
