@@ -31,6 +31,7 @@ jobs:
         id: send
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_TOKEN_B: ${{ secrets.LINE_TOKEN_B }}
           LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
         run: python remind.py
 

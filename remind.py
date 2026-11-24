@@ -1,4 +1,5 @@
 import os
+import sys
 import csv
 import io
 import json
@@ -7,7 +8,8 @@ import requests
 from datetime import datetime, timedelta
 
 # ===== 設定 =====
-CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_TOKEN", "")
+# A 帳號優先；A 這個月額度用完（429）就改用 B 帳號（兩個帳號都在群組裡）
+TOKENS = [t for t in (os.environ.get("LINE_TOKEN", ""), os.environ.get("LINE_TOKEN_B", "")) if t]
 GROUP_ID = os.environ.get("LINE_GROUP_ID", "")
 
 # 輪值分配直接讀取 Google Sheet（試算表更新後不需改程式）
@@ -183,15 +185,14 @@ def build_flex(meeting_date, weekday, persons):
 
 def send_line_message(message):
     url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}"
-    }
-    data = {
-        "to": GROUP_ID,
-        "messages": [message]
-    }
-    response = requests.post(url, headers=headers, json=data)
+    data = {"to": GROUP_ID, "messages": [message]}
+    response = None
+    for i, token in enumerate(TOKENS):
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code != 429:
+            break
+        print(f"[額度用完] 第 {i + 1} 個帳號 429，改用下一個帳號")
     return response
 
 
@@ -233,6 +234,7 @@ def main():
         print(f"[成功] 已發送 {meeting_date} 聚會提醒")
     else:
         print(f"[失敗] {response.status_code}：{response.text}")
+        sys.exit(1)  # 讓 Actions 顯示紅色失敗，不再假裝成功
 
 
 if __name__ == "__main__":

@@ -14,14 +14,22 @@ IMAGE_URL = "https://raw.githubusercontent.com/JoeYoung6406/line-remind/main/pla
 LINKS_PATH = "links.json"
 
 def _push(messages):
-    return requests.post(
-        "https://api.line.me/v2/bot/message/push",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {LINE_TOKEN}"
-        },
-        json={"to": GROUP_ID, "messages": messages}
-    )
+    # 單雙號輪流用 A/B 帳號；輪到的帳號這個月額度用完（429）就改用另一個
+    other = os.environ.get("LINE_TOKEN_B", "") if LINE_TOKEN == os.environ.get("LINE_TOKEN", "") else os.environ.get("LINE_TOKEN", "")
+    response = None
+    for token in [t for t in (LINE_TOKEN, other) if t]:
+        response = requests.post(
+            "https://api.line.me/v2/bot/message/push",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            },
+            json={"to": GROUP_ID, "messages": messages}
+        )
+        if response.status_code != 429:
+            break
+        print("[額度用完] 這個帳號 429，改用另一個帳號")
+    return response
 
 def plan_aspect_ratio():
     """讀 plan.png 的實際尺寸給 hero 圖用（LINE 限制高最多是寬的 3 倍）。"""
@@ -97,6 +105,7 @@ def main():
         print("[成功] 每日計畫已發送")
     else:
         print(f"[失敗] {response.status_code}：{response.text}")
+        raise SystemExit(1)  # 讓 Actions 顯示紅色失敗
 
 if __name__ == "__main__":
     main()
